@@ -19,20 +19,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="FastAPI Auth", lifespan=lifespan)
 
 # Configure CORS to allow frontend requests
-origins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://localhost:8080",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:8080",
-    settings.FRONTEND_URL,
-]
+origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_credentials=False,  # MUST be False when origins is ["*"]
     allow_methods=["*"],
     allow_headers=["*"],
 )
