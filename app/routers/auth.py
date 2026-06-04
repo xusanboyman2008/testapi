@@ -1,6 +1,7 @@
 import secrets
 import logging
 from datetime import datetime, timedelta
+from typing import List
 
 import pyotp
 from authlib.integrations.starlette_client import OAuth
@@ -19,7 +20,7 @@ from app.core.security import (
     verify_password,
 )
 from app.db.database import get_db
-from app.models.user import User
+from app.models.user import User, UserProfile, UserHistory
 from app.schemas.user import (
     ForgotPassword,
     ResetPassword,
@@ -28,6 +29,10 @@ from app.schemas.user import (
     UserCreate,
     UserInDB,
     UserMFA,
+    UserProfileUpdate,
+    UserProfileInDB,
+    UserHistoryCreate,
+    UserHistoryInDB,
 )
 from app.utils.email import send_password_reset_email
 
@@ -419,3 +424,104 @@ async def read_teacher_data():
 )
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+# ── User Profile Endpoints ───────────────────────────────────────────────────
+@router.get(
+    "/profile",
+    response_model=UserProfileInDB,
+    summary="Get User Profile",
+    description="Retrieves the profile of the current user. Creates one if it does not exist.",
+)
+async def get_profile(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(UserProfile).filter(UserProfile.user_id == current_user.id)
+    )
+    profile = result.scalars().first()
+    if not profile:
+        profile = UserProfile(user_id=current_user.id)
+        db.add(profile)
+        await db.commit()
+        await db.refresh(profile)
+    return profile
+
+
+@router.put(
+    "/profile",
+    response_model=UserProfileInDB,
+    summary="Update User Profile",
+    description="Updates the profile of the current user.",
+)
+async def update_profile(
+    profile_in: UserProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(UserProfile).filter(UserProfile.user_id == current_user.id)
+    )
+    profile = result.scalars().first()
+    if not profile:
+        profile = UserProfile(user_id=current_user.id)
+        db.add(profile)
+        await db.commit()
+        await db.refresh(profile)
+
+    for field, value in profile_in.model_dump(exclude_unset=True).items():
+        setattr(profile, field, value)
+
+    await db.commit()
+    await db.refresh(profile)
+    return profile
+
+
+# ── User History Endpoints ───────────────────────────────────────────────────
+@router.post(
+    "/history",
+    response_model=UserHistoryInDB,
+    summary="Create User History Record",
+    description="Creates a new history record for the current user.",
+)
+async def create_history(
+    history_in: UserHistoryCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    db_history = UserHistory(
+        user_id=current_user.id,
+        question=history_in.question,
+        data=history_in.data,
+    )
+    db.add(db_history)
+    await db.commit()
+    await db.refresh(db_history)
+    return db_history
+
+
+@router.get(
+    "/history",
+    response_model=List[UserHistoryInDB],
+    summary="Get User History",
+    description="Retrieves history records for the current user, ordered by creation time descending, with start/end slice pagination.",
+)
+async def get_history(
+    start: int = 0,
+    end: int = 3,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if end <= start:
+        return []
+    limit = end - start
+    result = await db.execute(
+        select(UserHistory)
+        .filter(UserHistory.user_id == current_user.id)
+        .order_by(UserHistory.created_at.desc())
+        .offset(start)
+        .limit(limit)
+    )
+    histories = result.scalars().all()
+    return histories

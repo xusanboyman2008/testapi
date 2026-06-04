@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from typing import Optional, List
+from datetime import datetime
 
 class UserBase(BaseModel):
     email: EmailStr = Field(..., description="User's email address")
@@ -79,3 +80,35 @@ class ResetPassword(BaseModel):
                 "new_password": "mynewpassword99"
             }
         }
+
+
+# User Profile Schemas
+class UserProfileBase(BaseModel):
+    first_name: Optional[str] = Field(None, description="First name")
+    last_name: Optional[str] = Field(None, description="Last name")
+    bio: Optional[str] = Field(None, description="User biography")
+    avatar_url: Optional[str] = Field(None, description="Avatar image URL")
+
+class UserProfileUpdate(UserProfileBase):
+    pass
+
+class UserProfileInDB(UserProfileBase):
+    id: int
+    user_id: int
+
+    class Config:
+        from_attributes = True
+
+
+# User History Schemas
+class UserHistoryCreate(BaseModel):
+    question: str = Field(..., description="The query/question asked by the user")
+    data: List[str] = Field(..., description="Array of HTML string responses (1-5 or more)")
+
+class UserHistoryInDB(UserHistoryCreate):
+    id: int
+    user_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
